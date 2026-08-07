@@ -26,16 +26,18 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Inject Global Include Paths into CMake
+    - name: Force Copy All Headers to Include Paths
       run: |
-        # ดึงพาธของโฟลเดอร์ย่อยทั้งหมดใต้ app/src/main/cpp แบบครอบจักรวาล
-        ALL_CPP_DIRS=$(find app/src/main/cpp -type d 2>/dev/null | tr '\n' ' ')
-        
-        # แก้ไข CMakeLists.txt ในโฟลเดอร์ samp ให้มองเห็นทุกโฟลเดอร์โดยไม่ต้องก็อปปี้ไฟล์
-        SAMP_CMAKE=$(find app/src/main/cpp/samp -maxdepth 1 -name "CMakeLists.txt" | head -n 1)
-        if [ -n "$SAMP_CMAKE" ]; then
-          sed -i "1i include_directories($ALL_CPP_DIRS)\nadd_compile_options(-w -fpermissive)" "$SAMP_CMAKE"
+        # หาตำแหน่งโฟลเดอร์ cpp หลัก
+        CPP_DIR=$(find app/src/main/cpp -type d -name "samp" | head -n 1)
+        if [ -z "$CPP_DIR" ]; then
+          CPP_DIR="app/src/main/cpp"
         fi
+
+        # ค้นหาไฟล์ .h ทั้งหมดในโปรเจกต์ แล้วคัดลอกไปไว้ใน gui และ samp โดยตรง
+        mkdir -p "$CPP_DIR/gui"
+        find app/src/main/cpp -type f -name "*.h" -exec cp {} "$CPP_DIR/gui/" \; 2>/dev/null || true
+        find app/src/main/cpp -type f -name "*.h" -exec cp {} "$CPP_DIR/" \; 2>/dev/null || true
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -47,7 +49,7 @@ jobs:
       run: chmod +x ./gradlew
 
     - name: Build Debug APK
-      run: ./gradlew assembleDebug
+      run: ./gradlew assembleDebug -Pandroid.disableAutomaticComponentCreation=true
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
