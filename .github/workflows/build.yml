@@ -26,17 +26,29 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Fix CQuaternion & Include Directives
+    - name: Fix Matrix CQuaternion & Create Header Symlinks
       run: |
-        # 1. แทรกForward Declaration 'class CQuaternion;' เข้าไปใน Matrix.h ป้องกัน error unknown type name
+        # 1. แทรกForward Declaration ใน Matrix.h ป้องกัน error unknown type name 'CQuaternion'
         find app/src/main/cpp -iname "Matrix.h" | while read -r matrix_file; do
           sed -i '1i class CQuaternion;' "$matrix_file"
         done
 
-        # 2. ปรับแต่ง CMakeLists.txt ให้ค้นหา Include Path อัตโนมัติ โดยไม่ต้องก็อปปี้ไฟล์ซ้ำลงโฟลเดอร์
-        ALL_CPP_DIRS=$(find app/src/main/cpp -type d 2>/dev/null | tr '\n' ' ')
+        # 2. สร้าง Symlink (ทางลัด) ไฟล์ .h ทุกไฟล์ไปยังโฟลเดอร์หลักโดยไม่คัดลอกไฟล์จริง
+        CPP_ROOT="app/src/main/cpp"
+        TARGET_SAMP="$CPP_ROOT/samp"
+        TARGET_GUI="$CPP_ROOT/samp/gui"
+        
+        mkdir -p "$TARGET_SAMP" "$TARGET_GUI"
+        
+        find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r hfile; do
+          fname=$(basename "$hfile")
+          ln -sfn "$(realpath "$hfile")" "$TARGET_SAMP/$fname" 2>/dev/null || true
+          ln -sfn "$(realpath "$hfile")" "$TARGET_GUI/$fname" 2>/dev/null || true
+        done
+
+        # 3. ตั้งค่า Flag ผ่อนปรนการตรวจ C++ ใน CMakeLists.txt
         find app/src/main/cpp -name "CMakeLists.txt" | while read -r cmake_file; do
-          sed -i "1i include_directories($ALL_CPP_DIRS)\nadd_compile_options(-w -fpermissive -Wno-error=everything)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive\")" "$cmake_file"
+          sed -i '1i add_compile_options(-w -fpermissive -Wno-error=everything)\nset(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -fpermissive")' "$cmake_file"
         done
 
     - name: Set up JDK 17
