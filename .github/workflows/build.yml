@@ -26,7 +26,7 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Comprehensive Fix for NDK C++ Strict Checks & Headers
+    - name: Fix C++ Exceptions, Gui Header & Map Casting
       run: |
         CPP_ROOT="app/src/main/cpp"
 
@@ -51,12 +51,15 @@ jobs:
           sed -i 's/#include "GUI\//#include "/g' "$f"
         done
 
-        # 4. คัดลอกไฟล์ .h จากโฟลเดอร์ย่อยมาไว้ที่ Root C++
-        find "$CPP_ROOT" -mindepth 2 -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r hfile; do
+        # 4. คัดลอกไฟล์ .h ทุกไฟล์ไปยังทุกโฟลเดอร์ย่อย C++ เพื่อให้หาเจอแน่นอน
+        find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r hfile; do
           fname=$(basename "$hfile")
           lower_name=$(echo "$fname" | tr '[:upper:]' '[:lower:]')
-          cp -n "$hfile" "$CPP_ROOT/$fname" 2>/dev/null || true
-          cp -n "$hfile" "$CPP_ROOT/$lower_name" 2>/dev/null || true
+          
+          find "$CPP_ROOT" -type d | while read -r target_dir; do
+            cp -n "$hfile" "$target_dir/$fname" 2>/dev/null || true
+            cp -n "$hfile" "$target_dir/$lower_name" 2>/dev/null || true
+          done
         done
 
         # 5. แก้ปัญหา Matrix.h และ audiostream.cpp
@@ -69,10 +72,10 @@ jobs:
           sed -i 's/Log("Stop: %s", g_szAudioStreamUrl);/\/\/ Log("Stop: %s", g_szAudioStreamUrl);/g' "$audio_file"
         done
 
-        # 6. เพิ่ม Flag ผ่อนคลายประเภทข้อมูลและการเช็ค C++ (กัน Error เรื่อง const char* -> std::string)
+        # 6. เปิดใช้งาน C++ Exceptions (-fexceptions) และผ่อนปรนการตรวจข้อมูล
         CPP_DIRS=$(find "$CPP_ROOT" -type d | tr '\n' ' ')
         find "$CPP_ROOT" -name "CMakeLists.txt" | while read -r cmake_file; do
-          sed -i "1i include_directories($CPP_DIRS)\nadd_compile_options(-w -fpermissive -fno-rtti -fno-exceptions -Wno-error=everything)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive -std=c++14 -Wno-error=everything\")\nset(CMAKE_C_FLAGS \"\${CMAKE_C_FLAGS} -w -fpermissive -Wno-error=everything\")" "$cmake_file"
+          sed -i "1i include_directories($CPP_DIRS)\nadd_compile_options(-w -fpermissive -fexceptions -ferror-limit=0 -Wno-error=everything)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive -fexceptions -std=c++14 -Wno-error=everything\")\nset(CMAKE_C_FLAGS \"\${CMAKE_C_FLAGS} -w -fpermissive -Wno-error=everything\")" "$cmake_file"
         done
 
     - name: Set up JDK 17
