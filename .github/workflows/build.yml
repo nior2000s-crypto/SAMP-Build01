@@ -69,21 +69,6 @@ jobs:
       with:
         name: app-debug
         path: app/build/outputs/apk/debug/app-debug.apk
-        # ฉีด include path และ compiler flags ยืดหยุ่นลงใน CMakeLists.txt ทุกไฟล์
-        find . -name "CMakeLists.txt" -exec sed -i '1i include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/gui ${CMAKE_CURRENT_SOURCE_DIR}/samp_widgets)\nset(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -fpermissive")' {} +
-
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-
-    - name: Make gradlew executable
-      run: chmod +x ./gradlew
-
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug
-
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
