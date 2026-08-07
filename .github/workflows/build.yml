@@ -33,8 +33,7 @@ jobs:
       run: chmod +x ./gradlew
 
     - name: Build Debug APK
-      run: ./gradlew assembleDebug -Dorg.gradle.cflags="-w" -Dorg.gradle.cppflags="-w"
-
+      run: ./gradlew assembleDebug --info
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
