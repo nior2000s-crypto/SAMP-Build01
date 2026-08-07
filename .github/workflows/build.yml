@@ -26,18 +26,13 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Restructure SAMP Headers Only
+    - name: Fix Header Include Paths cleanly
       run: |
-        SAMP_DIR="app/src/main/cpp/samp"
-        if [ -d "$SAMP_DIR" ]; then
-          # คัดลอกไฟล์ .h ทั้งหมดจากโฟลเดอร์ย่อยใน samp ขึ้นมาไว้ที่ root ของ samp และ gui
-          find "$SAMP_DIR" -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r header; do
-            cp "$header" "$SAMP_DIR/" 2>/dev/null || true
-            mkdir -p "$SAMP_DIR/gui"
-            mkdir -p "$SAMP_DIR/gui/samp_widgets"
-            cp "$header" "$SAMP_DIR/gui/" 2>/dev/null || true
-            cp "$header" "$SAMP_DIR/gui/samp_widgets/" 2>/dev/null || true
-          done
+        # ลบไฟล์ที่ก็อปปี้ซ้ำซ้อนทิ้ง ป้องกัน Redefinition Error
+        # สั่งเพิ่ม Include Path แบบเจาะจงเฉพาะโฟลเดอร์หลักใน CMakeLists.txt ของ samp โดยตรง
+        SAMP_CMAKE=$(find app/src/main/cpp/samp -name "CMakeLists.txt" | head -n 1)
+        if [ -n "$SAMP_CMAKE" ]; then
+          sed -i '1i include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/gui ${CMAKE_CURRENT_SOURCE_DIR}/gui/samp_widgets ${CMAKE_CURRENT_SOURCE_DIR}/vendor)\nset(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -fpermissive")' "$SAMP_CMAKE"
         fi
 
     - name: Set up JDK 17
@@ -50,7 +45,7 @@ jobs:
       run: chmod +x ./gradlew
 
     - name: Build Debug APK
-      run: ./gradlew assembleDebug -Pandroid.native.buildArgs="-w"
+      run: ./gradlew assembleDebug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
