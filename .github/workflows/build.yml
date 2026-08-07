@@ -26,7 +26,7 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Fix C++ Exceptions, Gui Header & Map Casting
+    - name: Fix Duplicate Vectors & Correct Include Strategy
       run: |
         CPP_ROOT="app/src/main/cpp"
 
@@ -43,26 +43,7 @@ jobs:
           sed -i 's/static void VerifyMacroImpl/inline static void VerifyMacroImpl/g' "$cfile"
         done
 
-        # 3. ตัดพาธโฟลเดอร์ออกจากคำสั่ง #include
-        find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.cpp" -o -name "*.c" \) | while read -r f; do
-          sed -i 's/#include "dialogs\//#include "/g' "$f"
-          sed -i 's/#include "Dialogs\//#include "/g' "$f"
-          sed -i 's/#include "gui\//#include "/g' "$f"
-          sed -i 's/#include "GUI\//#include "/g' "$f"
-        done
-
-        # 4. คัดลอกไฟล์ .h ทุกไฟล์ไปยังทุกโฟลเดอร์ย่อย C++ เพื่อให้หาเจอแน่นอน
-        find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r hfile; do
-          fname=$(basename "$hfile")
-          lower_name=$(echo "$fname" | tr '[:upper:]' '[:lower:]')
-          
-          find "$CPP_ROOT" -type d | while read -r target_dir; do
-            cp -n "$hfile" "$target_dir/$fname" 2>/dev/null || true
-            cp -n "$hfile" "$target_dir/$lower_name" 2>/dev/null || true
-          done
-        done
-
-        # 5. แก้ปัญหา Matrix.h และ audiostream.cpp
+        # 3. แก้ปัญหา Matrix.h และ audiostream.cpp
         find "$CPP_ROOT" -iname "Matrix.h" | while read -r matrix_file; do
           sed -i '1i class CQuaternion;' "$matrix_file"
         done
@@ -72,10 +53,14 @@ jobs:
           sed -i 's/Log("Stop: %s", g_szAudioStreamUrl);/\/\/ Log("Stop: %s", g_szAudioStreamUrl);/g' "$audio_file"
         done
 
-        # 6. เปิดใช้งาน C++ Exceptions (-fexceptions) และผ่อนปรนการตรวจข้อมูล
-        CPP_DIRS=$(find "$CPP_ROOT" -type d | tr '\n' ' ')
+        # 4. ลบไฟล์ Vector.h ที่ซ้ำซ้อนใน Collision เพื่อป้องกัน Ambiguous Error
+        find "$CPP_ROOT" -path "*/Collision/Vector.h" -delete 2>/dev/null || true
+
+        # 5. ตั้งค่า Include Directories ใน CMakeLists.txt ให้ครอบคลุมโดยไม่ก็อปปี้ไฟล์ซ้ำ
         find "$CPP_ROOT" -name "CMakeLists.txt" | while read -r cmake_file; do
-          sed -i "1i include_directories($CPP_DIRS)\nadd_compile_options(-w -fpermissive -fexceptions -ferror-limit=0 -Wno-error=everything)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive -fexceptions -std=c++14 -Wno-error=everything\")\nset(CMAKE_C_FLAGS \"\${CMAKE_C_FLAGS} -w -fpermissive -Wno-error=everything\")" "$cmake_file"
+          cmake_dir=$(dirname "$cmake_file")
+          all_subdirs=$(find "$cmake_dir" -type d | tr '\n' ' ')
+          sed -i "1i include_directories($all_subdirs)\nadd_compile_options(-w -fpermissive -fexceptions -Wno-everything)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive -fexceptions -std=c++14 -Wno-everything\")\nset(CMAKE_C_FLAGS \"\${CMAKE_C_FLAGS} -w -fpermissive -Wno-everything\")" "$cmake_file"
         done
 
     - name: Set up JDK 17
@@ -84,6 +69,17 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    - name: Make gradlew executable
+      run: chmod +x ./gradlew
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
+        path: app/build/outputs/apk/debug/app-debug.apk
     - name: Make gradlew executable
       run: chmod +x ./gradlew
 
