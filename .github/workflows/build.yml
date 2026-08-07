@@ -1,0 +1,57 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Unzip Project
+      run: |
+        ZIP_FILE=$(ls *.zip 2>/dev/null | head -n 1)
+        if [ -n "$ZIP_FILE" ]; then
+          echo "Unzipping $ZIP_FILE..."
+          unzip -o "$ZIP_FILE" -d temp_unzip
+          GRADLEW_PATH=$(find temp_unzip -name "gradlew" -type f | head -n 1)
+          if [ -n "$GRADLEW_PATH" ]; then
+            PROJECT_DIR=$(dirname "$GRADLEW_PATH")
+            cp -r "$PROJECT_DIR"/* .
+          fi
+          rm -rf temp_unzip
+        fi
+
+    - name: Fix C++ Include Paths & Structures
+      run: |
+        # หาตำแหน่งโฟลเดอร์ samp_widgets และคัดลอกไฟล์ header กระจายไปทุกจุดดักทางไว้
+        find . -type d -iname "samp_widgets" | while read -r widget_dir; do
+          parent_dir=$(dirname "$widget_dir")
+          echo "Copying contents of $widget_dir to $parent_dir and root cpp dirs..."
+          cp -r "$widget_dir"/* "$parent_dir/" 2>/dev/null || true
+        done
+
+        # ฉีด include path และ compiler flags ยืดหยุ่นลงใน CMakeLists.txt ทุกไฟล์
+        find . -name "CMakeLists.txt" -exec sed -i '1i include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/gui ${CMAKE_CURRENT_SOURCE_DIR}/samp_widgets)\nset(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -fpermissive")' {} +
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Make gradlew executable
+      run: chmod +x ./gradlew
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
+        path: app/build/outputs/apk/debug/app-debug.apk
