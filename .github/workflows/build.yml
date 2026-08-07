@@ -26,34 +26,35 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Comprehensive Fix for Opus & Headers
+    - name: Fix Opus & Ultimate Header Resolution
       run: |
         CPP_ROOT="app/src/main/cpp"
 
-        # 1. สร้างไฟล์ version.h หลอกไว้ในทุกโฟลเดอร์ของ Opus ป้องกัน fatal error
+        # 1. สร้างไฟล์ version.h และ config.h สำรองให้ Opus ทุกโฟลเดอร์
         find "$CPP_ROOT" -type d -iname "*opus*" | while read -r opus_dir; do
           echo '#define PACKAGE_VERSION "1.3.1"' > "$opus_dir/version.h"
           echo '#define VERSION "1.3.1"' >> "$opus_dir/version.h"
+          echo '#define VAR_ARRAYS 1' >> "$opus_dir/version.h"
         done
 
-        # 2. ปรับการเรียก include dialogs ให้ดึงไฟล์โดยตรง
-        find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.cpp" \) | while read -r f; do
+        # 2. ปรับการเรียก include dialogs ให้ดึงไฟล์ตรงๆ
+        find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.cpp" -o -name "*.c" \) | while read -r f; do
           sed -i 's/#include "dialogs\//#include "/g' "$f"
           sed -i 's/#include "Dialogs\//#include "/g' "$f"
         done
 
-        # 3. ก๊อปปี้กระจายไฟล์ .h ทุกไฟล์ไปยังโฟลเดอร์ย่อย C++
-        find "$CPP_ROOT" -maxdepth 3 -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r hfile; do
+        # 3. คัดลอก Header กระจายทุกโฟลเดอร์
+        find "$CPP_ROOT" -maxdepth 4 -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r hfile; do
           fname=$(basename "$hfile")
           lower_name=$(echo "$fname" | tr '[:upper:]' '[:lower:]')
           
-          find "$CPP_ROOT" -maxdepth 3 -type d | while read -r target_dir; do
+          find "$CPP_ROOT" -maxdepth 4 -type d | while read -r target_dir; do
             cp -n "$hfile" "$target_dir/$fname" 2>/dev/null || true
             cp -n "$hfile" "$target_dir/$lower_name" 2>/dev/null || true
           done
         done
 
-        # 4. แก้ Matrix.h & audiostream.cpp
+        # 4. แก้ปัญหา Matrix.h และ audiostream.cpp
         find "$CPP_ROOT" -iname "Matrix.h" | while read -r matrix_file; do
           sed -i '1i class CQuaternion;' "$matrix_file"
         done
@@ -63,10 +64,10 @@ jobs:
           sed -i 's/Log("Stop: %s", g_szAudioStreamUrl);/\/\/ Log("Stop: %s", g_szAudioStreamUrl);/g' "$audio_file"
         done
 
-        # 5. เพิ่ม Include Path ใน CMakeLists.txt
-        CPP_DIRS=$(find "$CPP_ROOT" -maxdepth 3 -type d | tr '\n' ' ')
+        # 5. เพิ่ม Include Path ใน CMakeLists.txt ทั้งหมด
+        CPP_DIRS=$(find "$CPP_ROOT" -type d | tr '\n' ' ')
         find "$CPP_ROOT" -name "CMakeLists.txt" | while read -r cmake_file; do
-          sed -i "1i include_directories($CPP_DIRS)\nadd_compile_options(-w -fpermissive -Wno-error=everything)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive\")" "$cmake_file"
+          sed -i "1i include_directories($CPP_DIRS)\nadd_compile_options(-w -fpermissive -Wno-error=everything)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive\")\nset(CMAKE_C_FLAGS \"\${CMAKE_C_FLAGS} -w\")" "$cmake_file"
         done
 
     - name: Set up JDK 17
