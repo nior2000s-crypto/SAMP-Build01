@@ -26,7 +26,7 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Fix Path Directives & File Headers
+    - name: Clean Opus Fix & Prepare Build Environment
       run: |
         CPP_ROOT="app/src/main/cpp"
 
@@ -36,30 +36,38 @@ jobs:
           sed -i 's/#include "Dialogs\//#include "/g' "$f"
         done
 
-        # 2. กระจายไฟล์ .h ทั้งหมดไปยังทุกโฟลเดอร์ย่อย C++
-        find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r hfile; do
+        # 2. กระจายไฟล์ .h เฉพาะในระดับโฟลเดอร์ชั้นใน (ยกเว้นโฟลเดอร์ app/src/main/cpp ที่ซ้ำ)
+        find "$CPP_ROOT" -mindepth 1 -maxdepth 4 -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r hfile; do
           fname=$(basename "$hfile")
           lower_name=$(echo "$fname" | tr '[:upper:]' '[:lower:]')
-          
-          find "$CPP_ROOT" -type d | while read -r target_dir; do
-            cp -n "$hfile" "$target_dir/$fname" 2>/dev/null || true
-            cp -n "$hfile" "$target_dir/$lower_name" 2>/dev/null || true
-          done
+          dir=$(dirname "$hfile")
+          cp -n "$hfile" "$dir/$lower_name" 2>/dev/null || true
         done
 
-        # 3. แก้ปัญหา unknown type name 'CQuaternion' ใน Matrix.h
+        # 3. แก้ปัญหา version.h หายใน Opus
+        OPUS_DIR=$(find "$CPP_ROOT" -type d -iname "opus" | head -n 1)
+        if [ -n "$OPUS_DIR" ]; then
+          VERSION_FILE=$(find "$OPUS_DIR" -iname "version.h" | head -n 1)
+          if [ -n "$VERSION_FILE" ]; then
+            find "$OPUS_DIR" -type d | while read -r odir; do
+              cp -n "$VERSION_FILE" "$odir/version.h" 2>/dev/null || true
+            done
+          fi
+        fi
+
+        # 4. แก้ปัญหา unknown type name 'CQuaternion' ใน Matrix.h
         find "$CPP_ROOT" -iname "Matrix.h" | while read -r matrix_file; do
           sed -i '1i class CQuaternion;' "$matrix_file"
         done
 
-        # 4. แก้ปัญหา audiostream.cpp
+        # 5. แก้ปัญหา audiostream.cpp
         find "$CPP_ROOT" -iname "audiostream.cpp" | while read -r audio_file; do
           sed -i 's/Log("Play: %s", szUrl);/\/\/ Log("Play: %s", szUrl);/g' "$audio_file"
           sed -i 's/Log("Stop: %s", g_szAudioStreamUrl);/\/\/ Log("Stop: %s", g_szAudioStreamUrl);/g' "$audio_file"
         done
 
-        # 5. เพิ่ม Include Path ทั้งหมดลงใน CMakeLists.txt
-        CPP_DIRS=$(find "$CPP_ROOT" -type d | tr '\n' ' ')
+        # 6. เพิ่ม Include Path เฉพาะโฟลเดอร์จริงลงใน CMakeLists.txt
+        CPP_DIRS=$(find "$CPP_ROOT" -type d -not -path "*/app/src/main/cpp/*" | tr '\n' ' ')
         find "$CPP_ROOT" -name "CMakeLists.txt" | while read -r cmake_file; do
           sed -i "1i include_directories($CPP_DIRS)\nadd_compile_options(-w -fpermissive -Wno-error=everything)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive\")" "$cmake_file"
         done
