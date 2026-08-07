@@ -26,30 +26,39 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Global Search & Inject Header Files
+    - name: Universal Header & Dialogs Fixer
       run: |
-        # ค้นหาไฟล์ playerTabList.h จากทุกซอกทุกมุมของ repository (ไม่จำกัดเฉพาะโฟลเดอร์ samp)
+        # 1. ค้นหาไฟล์ playerTabList.h แล้ววางไว้ใน gui ทุกจุด
         TABLIST_PATH=$(find . -iname "*playertablist*.h" | head -n 1)
-        
         if [ -n "$TABLIST_PATH" ]; then
-          echo "Found TabList Header at: $TABLIST_PATH"
-          # สำเนาไฟล์นี้ไปไว้ข้างๆ gui.h ทุกจุดที่มี gui.h อยู่
           find . -name "gui.h" | while read -r gui_file; do
             gui_dir=$(dirname "$gui_file")
-            echo "Copying playerTabList.h to $gui_dir"
             cp "$TABLIST_PATH" "$gui_dir/playerTabList.h" 2>/dev/null || true
-            cp "$TABLIST_PATH" "$gui_dir/PlayerTabList.h" 2>/dev/null || true
           done
         fi
 
-        # ดึงไฟล์ .h ทั้งหมดจากทุกโฟลเดอร์ย่อย เทรวมเข้าไปในโฟลเดอร์ gui เพื่อป้องกันการหาไฟล์ไม่เจอ
-        find . -type d -name "gui" | while read -r gui_dir; do
-          find . -type f -name "*.h" -exec cp {} "$gui_dir/" \; 2>/dev/null || true
+        # 2. ค้นหาไฟล์ tablistwidget.h หรือ widget อื่นๆ แล้วสร้างโฟลเดอร์ dialogs รองรับ
+        WIDGET_PATH=$(find . -iname "*tablistwidget*.h" | head -n 1)
+        if [ -n "$WIDGET_PATH" ]; then
+          widget_parent=$(dirname "$WIDGET_PATH")
+          echo "Found widget at $WIDGET_PATH"
+          
+          # สร้างโฟลเดอร์ dialogs ไว้ข้างๆ gui และในทุกจุดที่มี gui
+          find . -name "gui" -type d | while read -r g_dir; do
+            parent_d=$(dirname "$g_dir")
+            mkdir -p "$parent_d/dialogs"
+            cp "$widget_parent"/*.h "$parent_d/dialogs/" 2>/dev/null || true
+            cp "$widget_parent"/*.h "$g_dir/" 2>/dev/null || true
+          done
+        fi
+
+        # 3. เทไฟล์ .h ทั้งหมดมารวมกันในทุกโฟลเดอร์ dialogs และ samp เพื่อความปลอดภัยสูงสุด
+        find . -type d -name "dialogs" | while read -r d_dir; do
+          find . -type f -name "*.h" -exec cp {} "$d_dir/" \; 2>/dev/null || true
         done
 
-    - name: Configure CMake Flags
+    - name: Configure CMake Include Paths
       run: |
-        # บังคับเพิ่ม Include Directories ให้ CMake สแกนหาไฟล์ .h จากทุกโฟลเดอร์ย่อยใน app/src/main/cpp
         CPP_DIRS=$(find app/src/main/cpp -type d 2>/dev/null | tr '\n' ' ')
         find . -name "CMakeLists.txt" -exec sed -i "1i include_directories($CPP_DIRS)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive\")" {} +
 
