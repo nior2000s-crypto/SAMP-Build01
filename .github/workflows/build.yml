@@ -26,7 +26,7 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Clean Fix for Vector.h & Header Duplicates
+    - name: Fix Pathing & Config for Header Resolving
       run: |
         CPP_ROOT="app/src/main/cpp"
 
@@ -38,14 +38,23 @@ jobs:
           echo '#define CUSTOM_MODES 1' >> "$opus_dir/version.h"
         done
 
-        # 2. ปรับการเรียก include dialogs ให้ดึงไฟล์ตรงๆ
+        # 2. ปรับ include ที่ติดโฟลเดอร์ dialogs/ หรือ gui/ ให้เรียกชื่อไฟล์โดยตรง
         find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.cpp" -o -name "*.c" \) | while read -r f; do
           sed -i 's/#include "dialogs\//#include "/g' "$f"
           sed -i 's/#include "Dialogs\//#include "/g' "$f"
           sed -i 's/#include "gui\//#include "/g' "$f"
+          sed -i 's/#include "GUI\//#include "/g' "$f"
         done
 
-        # 3. แก้ปัญหา Matrix.h และ audiostream.cpp
+        # 3. สร้าง Symlink / สำเนาไฟล์ .h ไว้ที่ Root C++ (เฉพาะไฟล์ที่ขาด เพื่อไม่ให้ CVector ตีกัน)
+        find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r hfile; do
+          fname=$(basename "$hfile")
+          lower_name=$(echo "$fname" | tr '[:upper:]' '[:lower:]')
+          cp -n "$hfile" "$CPP_ROOT/$fname" 2>/dev/null || true
+          cp -n "$hfile" "$CPP_ROOT/$lower_name" 2>/dev/null || true
+        done
+
+        # 4. แก้ปัญหา Matrix.h และ audiostream.cpp
         find "$CPP_ROOT" -iname "Matrix.h" | while read -r matrix_file; do
           sed -i '1i class CQuaternion;' "$matrix_file"
         done
@@ -55,7 +64,7 @@ jobs:
           sed -i 's/Log("Stop: %s", g_szAudioStreamUrl);/\/\/ Log("Stop: %s", g_szAudioStreamUrl);/g' "$audio_file"
         done
 
-        # 4. เพิ่ม Include Path โดยไม่ก๊อปปี้ไฟล์ซ้ำ + เพิ่ม Flag ปลดล็อก error limit และอนุญาตการดึง operator ซ้ำ
+        # 5. ใส่ Include Path และตั้งค่า Flag
         CPP_DIRS=$(find "$CPP_ROOT" -type d | tr '\n' ' ')
         find "$CPP_ROOT" -name "CMakeLists.txt" | while read -r cmake_file; do
           sed -i "1i include_directories($CPP_DIRS)\nadd_compile_options(-w -fpermissive -ferror-limit=0 -Wno-error=everything)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive -ferror-limit=0\")\nset(CMAKE_C_FLAGS \"\${CMAKE_C_FLAGS} -w -fpermissive -ferror-limit=0\")" "$cmake_file"
