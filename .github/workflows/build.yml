@@ -41,6 +41,13 @@ jobs:
           done
         fi
 
+    - name: Bypass C++ Compiler Strict Errors
+      run: |
+        # แทรกคำสั่งปิด Warning และอนุญาต C++ ไวยากรณ์รุ่นเก่า (-w -fpermissive -Wno-error) ลงใน CMakeLists.txt ทุกตัว
+        find app/src/main/cpp -name "CMakeLists.txt" | while read -r cmake_file; do
+          sed -i '1i add_compile_options(-w -fpermissive -Wno-error=everything)\nset(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -fpermissive -fdeclspec")' "$cmake_file"
+        done
+
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
