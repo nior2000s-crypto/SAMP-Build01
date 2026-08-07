@@ -26,18 +26,20 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Force Copy All Headers to Include Paths
+    - name: Fix Case Sensitivity & Link All Headers
       run: |
-        # หาตำแหน่งโฟลเดอร์ cpp หลัก
-        CPP_DIR=$(find app/src/main/cpp -type d -name "samp" | head -n 1)
-        if [ -z "$CPP_DIR" ]; then
-          CPP_DIR="app/src/main/cpp"
+        CPP_ROOT="app/src/main/cpp"
+        if [ -d "$CPP_ROOT" ]; then
+          find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r hfile; do
+            filename=$(basename "$hfile")
+            lower_filename=$(echo "$filename" | tr '[:upper:]' '[:lower:]')
+            
+            find "$CPP_ROOT" -type d \( -name "samp" -o -name "gui" -o -name "dialogs" \) | while read -r target_dir; do
+              cp -u "$hfile" "$target_dir/$filename" 2>/dev/null || true
+              cp -u "$hfile" "$target_dir/$lower_filename" 2>/dev/null || true
+            done
+          done
         fi
-
-        # ค้นหาไฟล์ .h ทั้งหมดในโปรเจกต์ แล้วคัดลอกไปไว้ใน gui และ samp โดยตรง
-        mkdir -p "$CPP_DIR/gui"
-        find app/src/main/cpp -type f -name "*.h" -exec cp {} "$CPP_DIR/gui/" \; 2>/dev/null || true
-        find app/src/main/cpp -type f -name "*.h" -exec cp {} "$CPP_DIR/" \; 2>/dev/null || true
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -49,7 +51,7 @@ jobs:
       run: chmod +x ./gradlew
 
     - name: Build Debug APK
-      run: ./gradlew assembleDebug -Pandroid.disableAutomaticComponentCreation=true
+      run: ./gradlew assembleDebug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
