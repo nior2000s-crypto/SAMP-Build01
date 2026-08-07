@@ -24,17 +24,30 @@ jobs:
             cp -r "$PROJECT_DIR"/* .
           fi
           rm -rf temp_unzip
-        else
-          echo "No zip file found, skipping unzip."
         fi
 
-    - name: Flatten Widget Headers & Case Fix
+    - name: Force Legacy C++ Standard in CMake
       run: |
-        # ค้นหาโฟลเดอร์ samp_widgets แบบไม่สนตัวเล็กตัวใหญ่
-        WIDGET_DIR=$(find . -iname "samp_widgets" -type d | head -n 1)
-        if [ -n "$WIDGET_DIR" ]; then
-          echo "Found widget directory at: $WIDGET_DIR"
-          
+        # ปรับการคอมไพล์ C++ ให้ยืดหยุ่น ข้ามข้อผิดพลาดเล็กน้อยของโค้ด SAMP รุ่นเก่า
+        find . -name "CMakeLists.txt" -exec sed -i '1i set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -fpermissive -std=c++14")' {} +
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Make gradlew executable
+      run: chmod +x ./gradlew
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
+        path: app/build/outputs/apk/debug/app-debug.apk          
           # คัดลอกไฟล์ทั้งหมดใน samp_widgets ไปวางไว้ตามโฟลเดอร์ gui และโฟลเดอร์ย่อย samp_widgets ทุกจุด
           find . -type d -name "gui" | while read -r gui_path; do
             mkdir -p "$gui_path/samp_widgets"
