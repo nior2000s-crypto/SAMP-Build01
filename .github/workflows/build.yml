@@ -26,22 +26,33 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Fix Include Paths & C++ Strict Errors
+    - name: Force Fix playerTabList.h Case Sensitivity
       run: |
-        # 1. แก้ปัญหา unknown type name 'CQuaternion'
-        find app/src/main/cpp -iname "Matrix.h" | while read -r matrix_file; do
+        CPP_ROOT="app/src/main/cpp"
+        
+        # 1. ค้นหาไฟล์ playertablist.h (ทุกรูปแบบตัวพิมพ์) แล้วก๊อปปี้สร้างชื่อ playerTabList.h วางดักไว้ทุกโฟลเดอร์ C++
+        TABLIST_FILE=$(find "$CPP_ROOT" -iname "playertablist.h" | head -n 1)
+        if [ -n "$TABLIST_FILE" ]; then
+          find "$CPP_ROOT" -type d | while read -r dir; do
+            cp "$TABLIST_FILE" "$dir/playerTabList.h" 2>/dev/null || true
+            cp "$TABLIST_FILE" "$dir/playertablist.h" 2>/dev/null || true
+          done
+        fi
+
+        # 2. แก้ปัญหา unknown type name 'CQuaternion' ใน Matrix.h
+        find "$CPP_ROOT" -iname "Matrix.h" | while read -r matrix_file; do
           sed -i '1i class CQuaternion;' "$matrix_file"
         done
 
-        # 2. แก้ปัญหา audiostream.cpp
-        find app/src/main/cpp -iname "audiostream.cpp" | while read -r audio_file; do
+        # 3. แก้ปัญหา audiostream.cpp
+        find "$CPP_ROOT" -iname "audiostream.cpp" | while read -r audio_file; do
           sed -i 's/Log("Play: %s", szUrl);/\/\/ Log("Play: %s", szUrl);/g' "$audio_file"
           sed -i 's/Log("Stop: %s", g_szAudioStreamUrl);/\/\/ Log("Stop: %s", g_szAudioStreamUrl);/g' "$audio_file"
         done
 
-        # 3. ดึงพาธโฟลเดอร์ย่อย C++ ทั้งหมดมาใส่ใน include_directories ของ CMakeLists.txt
-        CPP_DIRS=$(find app/src/main/cpp -type d | tr '\n' ' ')
-        find app/src/main/cpp -name "CMakeLists.txt" | while read -r cmake_file; do
+        # 4. เพิ่ม Include Path ทั้งหมดลงใน CMakeLists.txt
+        CPP_DIRS=$(find "$CPP_ROOT" -type d | tr '\n' ' ')
+        find "$CPP_ROOT" -name "CMakeLists.txt" | while read -r cmake_file; do
           sed -i "1i include_directories($CPP_DIRS)\nadd_compile_options(-w -fpermissive -Wno-error=everything)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive\")" "$cmake_file"
         done
 
