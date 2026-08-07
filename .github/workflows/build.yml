@@ -18,9 +18,22 @@ jobs:
         if [ -n "$ZIP_FILE" ]; then
           echo "Unzipping $ZIP_FILE..."
           unzip -o "$ZIP_FILE" -d temp_unzip
-          mv temp_unzip/*/* . 2>/dev/null || mv temp_unzip/* . 2>/dev/null || true
+          # ค้นหาตำแหน่งไฟล์ gradlew แล้วย้ายไฟล์ทั้งหมดมาไว้ที่ root
+          GRADLEW_PATH=$(find temp_unzip -name "gradlew" -type f | head -n 1)
+          if [ -n "$GRADLEW_PATH" ]; then
+            PROJECT_DIR=$(dirname "$GRADLEW_PATH")
+            cp -r "$PROJECT_DIR"/* .
+          fi
+          rm -rf temp_unzip
         else
           echo "No zip file found, skipping unzip."
+        fi
+
+    - name: Fix Include Paths for C++
+      run: |
+        if [ -d "app/src/main/cpp/samp/gui/samp_widgets" ]; then
+          mkdir -p app/src/main/cpp/samp
+          cp -r app/src/main/cpp/samp/gui/samp_widgets app/src/main/cpp/samp/
         fi
 
     - name: Set up JDK 17
@@ -33,8 +46,13 @@ jobs:
       run: chmod +x ./gradlew
 
     - name: Build Debug APK
-      run: |
-        ./gradlew assembleDebug \
+      run: ./gradlew assembleDebug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
+        path: app/build/outputs/apk/debug/app-debug.apk        ./gradlew assembleDebug \
           -Pandroid.ndkPath=$ANDROID_NDK_HOME \
           -Dorg.gradle.cflags="-I$GITHUB_WORKSPACE/app/src/main/cpp/samp/gui" \
           -Dorg.gradle.cppflags="-I$GITHUB_WORKSPACE/app/src/main/cpp/samp/gui"
