@@ -26,26 +26,15 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Clean Duplicates & Create Soft Links
+    - name: Inject Global Include Paths into CMake
       run: |
-        SAMP_DIR="app/src/main/cpp/samp"
+        # ดึงพาธของโฟลเดอร์ย่อยทั้งหมดใต้ app/src/main/cpp แบบครอบจักรวาล
+        ALL_CPP_DIRS=$(find app/src/main/cpp -type d 2>/dev/null | tr '\n' ' ')
         
-        # 1. ลบโฟลเดอร์ dialogs ที่ก๊อปปี้ซ้ำออก ป้องกัน Redefinition Error
-        rm -rf "$SAMP_DIR/dialogs" 2>/dev/null || true
-        
-        # 2. ทำ Symlink เชื่อม samp/dialogs ไปหา samp_widgets/dialogs โดยตรง ไม่ก็อปปี้ไฟล์ซ้ำ
-        REAL_DIALOGS=$(find "$SAMP_DIR" -type d -name "dialogs" | head -n 1)
-        if [ -n "$REAL_DIALOGS" ]; then
-          mkdir -p "$SAMP_DIR"
-          ln -sfn "$(realpath "$REAL_DIALOGS")" "$SAMP_DIR/dialogs"
-        fi
-
-    - name: Configure CMake Include Paths
-      run: |
-        # ตั้งค่า include_directories แบบสะอาด ปราศจากไฟล์ซ้ำ
+        # แก้ไข CMakeLists.txt ในโฟลเดอร์ samp ให้มองเห็นทุกโฟลเดอร์โดยไม่ต้องก็อปปี้ไฟล์
         SAMP_CMAKE=$(find app/src/main/cpp/samp -maxdepth 1 -name "CMakeLists.txt" | head -n 1)
         if [ -n "$SAMP_CMAKE" ]; then
-          sed -i '1i include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/gui ${CMAKE_CURRENT_SOURCE_DIR}/samp_widgets ${CMAKE_CURRENT_SOURCE_DIR}/samp_widgets/dialogs)\nadd_compile_options(-w -fpermissive)' "$SAMP_CMAKE"
+          sed -i "1i include_directories($ALL_CPP_DIRS)\nadd_compile_options(-w -fpermissive)" "$SAMP_CMAKE"
         fi
 
     - name: Set up JDK 17
