@@ -26,31 +26,33 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Locate and Copy All Header Files
+    - name: Auto-Discover and Fix All Header Directories
       run: |
-        # ค้นหาไฟล์ playerTabList.h ทุกเวอร์ชันชื่อ
-        TABLIST_FILE=$(find . -iname "*playerTabList*.h" | head -n 1)
-        
-        if [ -n "$TABLIST_FILE" ]; then
-          echo "Found TabList file at: $TABLIST_FILE"
-          
-          # คัดลอกไปวางไว้ข้างๆ gui.h ทุกจุดที่มี gui.h
-          find . -name "gui.h" | while read -r gui_file; do
-            gui_dir=$(dirname "$gui_file")
-            echo "Copying header to $gui_dir"
-            cp "$TABLIST_FILE" "$gui_dir/playerTabList.h" 2>/dev/null || true
-            cp "$TABLIST_FILE" "$gui_dir/PlayerTabList.h" 2>/dev/null || true
+        # ค้นหาทุกโฟลเดอร์ย่อยใน app/src/main/cpp ที่มีไฟล์ .h
+        # แล้วสร้างโฟลเดอร์สำรองและคัดลอกไฟล์ขึ้นมาไว้ที่ระดับบนของ cpp
+        CPP_ROOT="app/src/main/cpp"
+        if [ -d "$CPP_ROOT" ]; then
+          find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r header_file; do
+            dir_path=$(dirname "$header_file")
+            folder_name=$(basename "$dir_path")
+            
+            # คัดลอกไฟล์ไปไว้ที่ cpp root และสร้างโฟลเดอร์ตามชื่อ parent
+            mkdir -p "$CPP_ROOT/$folder_name"
+            cp "$header_file" "$CPP_ROOT/$folder_name/" 2>/dev/null || true
+            cp "$header_file" "$CPP_ROOT/" 2>/dev/null || true
+            
+            # ป้องกันกรณีเรียกผ่าน samp/
+            mkdir -p "$CPP_ROOT/samp/$folder_name"
+            cp "$header_file" "$CPP_ROOT/samp/$folder_name/" 2>/dev/null || true
+            cp "$header_file" "$CPP_ROOT/samp/" 2>/dev/null || true
           done
         fi
 
-        # คัดลอกไฟล์ .h ทั้งหมดจากโฟลเดอร์ย่อยเข้ามาไว้ใน gui ด้วย
-        find . -type d -name "gui" | while read -r gui_dir; do
-          find "$gui_dir" -name "*.h" -exec cp {} "$gui_dir/" \; 2>/dev/null || true
-        done
-
-    - name: Inject Compiler Flags to CMake
+    - name: Inject Dynamic Include Paths into CMake
       run: |
-        find . -name "CMakeLists.txt" -exec sed -i '1i set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -fpermissive")' {} +
+        # ค้นหาโฟลเดอร์ทั้งหมดใต้ cpp แล้วยัดลง include_directories ของ CMakeLists.txt
+        ALL_DIRS=$(find app/src/main/cpp -type d | tr '\n' ' ')
+        find . -name "CMakeLists.txt" -exec sed -i "1i include_directories($ALL_DIRS)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive\")" {} +
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -64,11 +66,6 @@ jobs:
     - name: Build Debug APK
       run: ./gradlew assembleDebug
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
