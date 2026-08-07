@@ -26,17 +26,14 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Auto-Discover and Fix All Header Directories
+    - name: Auto-Discover and Fix SAMP Header Directories
       run: |
         CPP_ROOT="app/src/main/cpp"
         if [ -d "$CPP_ROOT" ]; then
-          find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r header_file; do
+          # คัดลอกเฉพาะ header files ที่อยู่ในโฟลเดอร์ samp
+          find "$CPP_ROOT/samp" -type f \( -name "*.h" -o -name "*.hpp" \) 2>/dev/null | while read -r header_file; do
             dir_path=$(dirname "$header_file")
             folder_name=$(basename "$dir_path")
-            
-            mkdir -p "$CPP_ROOT/$folder_name"
-            cp "$header_file" "$CPP_ROOT/$folder_name/" 2>/dev/null || true
-            cp "$header_file" "$CPP_ROOT/" 2>/dev/null || true
             
             mkdir -p "$CPP_ROOT/samp/$folder_name"
             cp "$header_file" "$CPP_ROOT/samp/$folder_name/" 2>/dev/null || true
@@ -44,10 +41,13 @@ jobs:
           done
         fi
 
-    - name: Inject CXX Flags Cleanly
+    - name: Inject Target-Specific CMake Settings
       run: |
-        ALL_DIRS=$(find app/src/main/cpp -type d | tr '\n' ' ')
-        find . -name "CMakeLists.txt" -exec sed -i "1i include_directories($ALL_DIRS)\nadd_compile_options(\$<\$<COMPILE_LANGUAGE:CXX>:-w> \$<\$<COMPILE_LANGUAGE:CXX>:-fpermissive>)" {} +
+        # ดึงรวมไดเรกทอรีเฉพาะใต้โฟลเดอร์ samp เท่านั้น ไม่รวม opus
+        SAMP_DIRS=$(find app/src/main/cpp/samp -type d 2>/dev/null | tr '\n' ' ')
+        
+        # ค้นหา CMakeLists.txt ที่อยู่ในส่วนของ samp เท่านั้น แล้วฉีด include_directories
+        find app/src/main/cpp/samp -name "CMakeLists.txt" -exec sed -i "1i include_directories($SAMP_DIRS)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive\")" {} +
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
