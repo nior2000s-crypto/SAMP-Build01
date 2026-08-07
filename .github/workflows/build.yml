@@ -49,6 +49,21 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
+        path: app/build/outputs/apk/debug/app-debug.apk      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Make gradlew executable
+      run: chmod +x ./gradlew
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
         path: app/build/outputs/apk/debug/app-debug.apk          
           # เชื่อมโยงไปยังจุดต่างๆ ที่ C++ อาจเรียกหา
           mkdir -p app/src/main/cpp/samp_widgets
