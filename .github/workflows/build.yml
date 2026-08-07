@@ -26,31 +26,32 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Fix Header Paths and Directory Names
+    - name: Global Search & Inject Header Files
       run: |
-        SAMP_DIR="app/src/main/cpp/samp"
-        if [ -d "$SAMP_DIR" ]; then
-          # ค้นหาโฟลเดอร์ samp_widgets ไม่ว่าจะอยู่จุดไหน แล้วคัดลอกไฟล์ข้างในมาวางกระจายไว้ใน gui และ samp
-          find "$SAMP_DIR" -type d -iname "samp_widgets" | while read -r widget_dir; do
-            cp -r "$widget_dir"/* "$SAMP_DIR/gui/" 2>/dev/null || true
-            cp -r "$widget_dir"/* "$SAMP_DIR/" 2>/dev/null || true
-            mkdir -p "$SAMP_DIR/samp_widgets"
-            cp -r "$widget_dir"/* "$SAMP_DIR/samp_widgets/" 2>/dev/null || true
-          done
-
-          # สร้างโฟลเดอร์ dialogs สำรองดักไว้ด้วย
-          find "$SAMP_DIR" -type d -iname "dialogs" | while read -r dialog_dir; do
-            cp -r "$dialog_dir"/* "$SAMP_DIR/gui/" 2>/dev/null || true
-            mkdir -p "$SAMP_DIR/dialogs"
-            cp -r "$dialog_dir"/* "$SAMP_DIR/dialogs/" 2>/dev/null || true
+        # ค้นหาไฟล์ playerTabList.h จากทุกซอกทุกมุมของ repository (ไม่จำกัดเฉพาะโฟลเดอร์ samp)
+        TABLIST_PATH=$(find . -iname "*playertablist*.h" | head -n 1)
+        
+        if [ -n "$TABLIST_PATH" ]; then
+          echo "Found TabList Header at: $TABLIST_PATH"
+          # สำเนาไฟล์นี้ไปไว้ข้างๆ gui.h ทุกจุดที่มี gui.h อยู่
+          find . -name "gui.h" | while read -r gui_file; do
+            gui_dir=$(dirname "$gui_file")
+            echo "Copying playerTabList.h to $gui_dir"
+            cp "$TABLIST_PATH" "$gui_dir/playerTabList.h" 2>/dev/null || true
+            cp "$TABLIST_PATH" "$gui_dir/PlayerTabList.h" 2>/dev/null || true
           done
         fi
 
-        # ฝัง include_directories เฉพาะใน CMakeLists.txt ของ samp เท่านั้น
-        SAMP_CMAKE=$(find app/src/main/cpp/samp -maxdepth 1 -name "CMakeLists.txt" | head -n 1)
-        if [ -n "$SAMP_CMAKE" ]; then
-          sed -i '1i include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/gui ${CMAKE_CURRENT_SOURCE_DIR}/samp_widgets ${CMAKE_CURRENT_SOURCE_DIR}/dialogs)\nadd_compile_options(-w -fpermissive)' "$SAMP_CMAKE"
-        fi
+        # ดึงไฟล์ .h ทั้งหมดจากทุกโฟลเดอร์ย่อย เทรวมเข้าไปในโฟลเดอร์ gui เพื่อป้องกันการหาไฟล์ไม่เจอ
+        find . -type d -name "gui" | while read -r gui_dir; do
+          find . -type f -name "*.h" -exec cp {} "$gui_dir/" \; 2>/dev/null || true
+        done
+
+    - name: Configure CMake Flags
+      run: |
+        # บังคับเพิ่ม Include Directories ให้ CMake สแกนหาไฟล์ .h จากทุกโฟลเดอร์ย่อยใน app/src/main/cpp
+        CPP_DIRS=$(find app/src/main/cpp -type d 2>/dev/null | tr '\n' ' ')
+        find . -name "CMakeLists.txt" -exec sed -i "1i include_directories($CPP_DIRS)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive\")" {} +
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
