@@ -26,15 +26,49 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Fix C++ Include Paths & Structures
+    - name: Locate and Copy All Header Files
       run: |
-        # หาตำแหน่งโฟลเดอร์ samp_widgets และคัดลอกไฟล์ header กระจายไปทุกจุดดักทางไว้
-        find . -type d -iname "samp_widgets" | while read -r widget_dir; do
-          parent_dir=$(dirname "$widget_dir")
-          echo "Copying contents of $widget_dir to $parent_dir and root cpp dirs..."
-          cp -r "$widget_dir"/* "$parent_dir/" 2>/dev/null || true
+        # ค้นหาไฟล์ playerTabList.h ทุกเวอร์ชันชื่อ
+        TABLIST_FILE=$(find . -iname "*playerTabList*.h" | head -n 1)
+        
+        if [ -n "$TABLIST_FILE" ]; then
+          echo "Found TabList file at: $TABLIST_FILE"
+          
+          # คัดลอกไปวางไว้ข้างๆ gui.h ทุกจุดที่มี gui.h
+          find . -name "gui.h" | while read -r gui_file; do
+            gui_dir=$(dirname "$gui_file")
+            echo "Copying header to $gui_dir"
+            cp "$TABLIST_FILE" "$gui_dir/playerTabList.h" 2>/dev/null || true
+            cp "$TABLIST_FILE" "$gui_dir/PlayerTabList.h" 2>/dev/null || true
+          done
+        fi
+
+        # คัดลอกไฟล์ .h ทั้งหมดจากโฟลเดอร์ย่อยเข้ามาไว้ใน gui ด้วย
+        find . -type d -name "gui" | while read -r gui_dir; do
+          find "$gui_dir" -name "*.h" -exec cp {} "$gui_dir/" \; 2>/dev/null || true
         done
 
+    - name: Inject Compiler Flags to CMake
+      run: |
+        find . -name "CMakeLists.txt" -exec sed -i '1i set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -fpermissive")' {} +
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Make gradlew executable
+      run: chmod +x ./gradlew
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
+        path: app/build/outputs/apk/debug/app-debug.apk
         # ฉีด include path และ compiler flags ยืดหยุ่นลงใน CMakeLists.txt ทุกไฟล์
         find . -name "CMakeLists.txt" -exec sed -i '1i include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/gui ${CMAKE_CURRENT_SOURCE_DIR}/samp_widgets)\nset(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -fpermissive")' {} +
 
