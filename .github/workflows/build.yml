@@ -18,7 +18,6 @@ jobs:
         if [ -n "$ZIP_FILE" ]; then
           echo "Unzipping $ZIP_FILE..."
           unzip -o "$ZIP_FILE" -d temp_unzip
-          # ค้นหาตำแหน่งไฟล์ gradlew แล้วย้ายไฟล์ทั้งหมดมาไว้ที่ root
           GRADLEW_PATH=$(find temp_unzip -name "gradlew" -type f | head -n 1)
           if [ -n "$GRADLEW_PATH" ]; then
             PROJECT_DIR=$(dirname "$GRADLEW_PATH")
@@ -29,11 +28,21 @@ jobs:
           echo "No zip file found, skipping unzip."
         fi
 
-    - name: Fix Include Paths for C++
+    - name: Link C++ Header Directories
       run: |
-        if [ -d "app/src/main/cpp/samp/gui/samp_widgets" ]; then
-          mkdir -p app/src/main/cpp/samp
-          cp -r app/src/main/cpp/samp/gui/samp_widgets app/src/main/cpp/samp/
+        # ค้นหาตำแหน่งโฟลเดอร์ samp_widgets ที่แท้จริง
+        WIDGETS_DIR=$(find . -type d -name "samp_widgets" | head -n 1)
+        if [ -n "$WIDGETS_DIR" ]; then
+          echo "Found samp_widgets at: $WIDGETS_DIR"
+          
+          # เชื่อมโยงไปยังจุดต่างๆ ที่ C++ อาจเรียกหา
+          mkdir -p app/src/main/cpp/samp_widgets
+          mkdir -p app/src/main/cpp/samp/samp_widgets
+          mkdir -p app/src/main/cpp/samp/gui/samp_widgets
+          
+          cp -r $WIDGETS_DIR/* app/src/main/cpp/samp_widgets/ 2>/dev/null || true
+          cp -r $WIDGETS_DIR/* app/src/main/cpp/samp/samp_widgets/ 2>/dev/null || true
+          cp -r $WIDGETS_DIR/* app/src/main/cpp/samp/gui/samp_widgets/ 2>/dev/null || true
         fi
 
     - name: Set up JDK 17
@@ -47,15 +56,6 @@ jobs:
 
     - name: Build Debug APK
       run: ./gradlew assembleDebug
-
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-debug
-        path: app/build/outputs/apk/debug/app-debug.apk        ./gradlew assembleDebug \
-          -Pandroid.ndkPath=$ANDROID_NDK_HOME \
-          -Dorg.gradle.cflags="-I$GITHUB_WORKSPACE/app/src/main/cpp/samp/gui" \
-          -Dorg.gradle.cppflags="-I$GITHUB_WORKSPACE/app/src/main/cpp/samp/gui"
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
