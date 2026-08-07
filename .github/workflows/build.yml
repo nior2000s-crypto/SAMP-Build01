@@ -28,31 +28,26 @@ jobs:
 
     - name: Auto-Discover and Fix All Header Directories
       run: |
-        # ค้นหาทุกโฟลเดอร์ย่อยใน app/src/main/cpp ที่มีไฟล์ .h
-        # แล้วสร้างโฟลเดอร์สำรองและคัดลอกไฟล์ขึ้นมาไว้ที่ระดับบนของ cpp
         CPP_ROOT="app/src/main/cpp"
         if [ -d "$CPP_ROOT" ]; then
           find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r header_file; do
             dir_path=$(dirname "$header_file")
             folder_name=$(basename "$dir_path")
             
-            # คัดลอกไฟล์ไปไว้ที่ cpp root และสร้างโฟลเดอร์ตามชื่อ parent
             mkdir -p "$CPP_ROOT/$folder_name"
             cp "$header_file" "$CPP_ROOT/$folder_name/" 2>/dev/null || true
             cp "$header_file" "$CPP_ROOT/" 2>/dev/null || true
             
-            # ป้องกันกรณีเรียกผ่าน samp/
             mkdir -p "$CPP_ROOT/samp/$folder_name"
             cp "$header_file" "$CPP_ROOT/samp/$folder_name/" 2>/dev/null || true
             cp "$header_file" "$CPP_ROOT/samp/" 2>/dev/null || true
           done
         fi
 
-    - name: Inject Dynamic Include Paths into CMake
+    - name: Inject CXX Flags Cleanly
       run: |
-        # ค้นหาโฟลเดอร์ทั้งหมดใต้ cpp แล้วยัดลง include_directories ของ CMakeLists.txt
         ALL_DIRS=$(find app/src/main/cpp -type d | tr '\n' ' ')
-        find . -name "CMakeLists.txt" -exec sed -i "1i include_directories($ALL_DIRS)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive\")" {} +
+        find . -name "CMakeLists.txt" -exec sed -i "1i include_directories($ALL_DIRS)\nadd_compile_options(\$<\$<COMPILE_LANGUAGE:CXX>:-w> \$<\$<COMPILE_LANGUAGE:CXX>:-fpermissive>)" {} +
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
