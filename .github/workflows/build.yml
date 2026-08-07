@@ -26,28 +26,19 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Auto-Discover and Fix SAMP Header Directories
+    - name: Restructure SAMP Headers Only
       run: |
-        CPP_ROOT="app/src/main/cpp"
-        if [ -d "$CPP_ROOT" ]; then
-          # คัดลอกเฉพาะ header files ที่อยู่ในโฟลเดอร์ samp
-          find "$CPP_ROOT/samp" -type f \( -name "*.h" -o -name "*.hpp" \) 2>/dev/null | while read -r header_file; do
-            dir_path=$(dirname "$header_file")
-            folder_name=$(basename "$dir_path")
-            
-            mkdir -p "$CPP_ROOT/samp/$folder_name"
-            cp "$header_file" "$CPP_ROOT/samp/$folder_name/" 2>/dev/null || true
-            cp "$header_file" "$CPP_ROOT/samp/" 2>/dev/null || true
+        SAMP_DIR="app/src/main/cpp/samp"
+        if [ -d "$SAMP_DIR" ]; then
+          # คัดลอกไฟล์ .h ทั้งหมดจากโฟลเดอร์ย่อยใน samp ขึ้นมาไว้ที่ root ของ samp และ gui
+          find "$SAMP_DIR" -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r header; do
+            cp "$header" "$SAMP_DIR/" 2>/dev/null || true
+            mkdir -p "$SAMP_DIR/gui"
+            mkdir -p "$SAMP_DIR/gui/samp_widgets"
+            cp "$header" "$SAMP_DIR/gui/" 2>/dev/null || true
+            cp "$header" "$SAMP_DIR/gui/samp_widgets/" 2>/dev/null || true
           done
         fi
-
-    - name: Inject Target-Specific CMake Settings
-      run: |
-        # ดึงรวมไดเรกทอรีเฉพาะใต้โฟลเดอร์ samp เท่านั้น ไม่รวม opus
-        SAMP_DIRS=$(find app/src/main/cpp/samp -type d 2>/dev/null | tr '\n' ' ')
-        
-        # ค้นหา CMakeLists.txt ที่อยู่ในส่วนของ samp เท่านั้น แล้วฉีด include_directories
-        find app/src/main/cpp/samp -name "CMakeLists.txt" -exec sed -i "1i include_directories($SAMP_DIRS)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive\")" {} +
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -59,7 +50,7 @@ jobs:
       run: chmod +x ./gradlew
 
     - name: Build Debug APK
-      run: ./gradlew assembleDebug
+      run: ./gradlew assembleDebug -Pandroid.native.buildArgs="-w"
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
