@@ -26,31 +26,50 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Force Fix playerTabList.h Case Sensitivity
+    - name: Fix All Dialogs & Case Sensitivity Issues
       run: |
         CPP_ROOT="app/src/main/cpp"
-        
-        # 1. ค้นหาไฟล์ playertablist.h (ทุกรูปแบบตัวพิมพ์) แล้วก๊อปปี้สร้างชื่อ playerTabList.h วางดักไว้ทุกโฟลเดอร์ C++
+
+        # 1. จัดการโฟลเดอร์ dialogs / Dialogs ให้รองรับทุกรูปแบบตัวพิมพ์
+        find "$CPP_ROOT" -type d -iname "dialogs" | while read -r dpath; do
+          parent_dir=$(dirname "$dpath")
+          mkdir -p "$parent_dir/dialogs" "$parent_dir/Dialogs"
+          cp -rn "$dpath"/* "$parent_dir/dialogs/" 2>/dev/null || true
+          cp -rn "$dpath"/* "$parent_dir/Dialogs/" 2>/dev/null || true
+        done
+
+        # 2. ค้นหาไฟล์ .h ทุกไฟล์ในโฟลเดอร์ C++ แล้วสร้างสำเนาทั้งชื่อพิมพ์เล็ก พิมพ์ใหญ่ และ camelCase
+        find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r hfile; do
+          dir=$(dirname "$hfile")
+          fname=$(basename "$hfile")
+          lower_name=$(echo "$fname" | tr '[:upper:]' '[:lower:]')
+          
+          # คัดลอกไฟล์สร้างชื่อพิมพ์เล็กตระเตรียมไว้ในโฟลเดอร์เดียวกัน
+          if [ "$fname" != "$lower_name" ]; then
+            cp -n "$hfile" "$dir/$lower_name" 2>/dev/null || true
+          fi
+        done
+
+        # 3. แก้ปัญหา playerTabList.h ดักไว้ทุกจุด
         TABLIST_FILE=$(find "$CPP_ROOT" -iname "playertablist.h" | head -n 1)
         if [ -n "$TABLIST_FILE" ]; then
           find "$CPP_ROOT" -type d | while read -r dir; do
-            cp "$TABLIST_FILE" "$dir/playerTabList.h" 2>/dev/null || true
-            cp "$TABLIST_FILE" "$dir/playertablist.h" 2>/dev/null || true
+            cp -n "$TABLIST_FILE" "$dir/playerTabList.h" 2>/dev/null || true
           done
         fi
 
-        # 2. แก้ปัญหา unknown type name 'CQuaternion' ใน Matrix.h
+        # 4. แก้ปัญหา unknown type name 'CQuaternion' ใน Matrix.h
         find "$CPP_ROOT" -iname "Matrix.h" | while read -r matrix_file; do
           sed -i '1i class CQuaternion;' "$matrix_file"
         done
 
-        # 3. แก้ปัญหา audiostream.cpp
+        # 5. แก้ปัญหา audiostream.cpp
         find "$CPP_ROOT" -iname "audiostream.cpp" | while read -r audio_file; do
           sed -i 's/Log("Play: %s", szUrl);/\/\/ Log("Play: %s", szUrl);/g' "$audio_file"
           sed -i 's/Log("Stop: %s", g_szAudioStreamUrl);/\/\/ Log("Stop: %s", g_szAudioStreamUrl);/g' "$audio_file"
         done
 
-        # 4. เพิ่ม Include Path ทั้งหมดลงใน CMakeLists.txt
+        # 6. เพิ่ม Include Path ทั้งหมดลงใน CMakeLists.txt
         CPP_DIRS=$(find "$CPP_ROOT" -type d | tr '\n' ' ')
         find "$CPP_ROOT" -name "CMakeLists.txt" | while read -r cmake_file; do
           sed -i "1i include_directories($CPP_DIRS)\nadd_compile_options(-w -fpermissive -Wno-error=everything)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive\")" "$cmake_file"
