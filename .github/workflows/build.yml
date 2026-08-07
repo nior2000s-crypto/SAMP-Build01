@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
     - uses: actions/checkout@v4
@@ -29,12 +29,17 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Download & Setup NDK r21e
-      run: |
-        wget -q https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
-        unzip -q android-ndk-r21e-linux-x86_64.zip -d $HOME
-        echo "ANDROID_NDK_HOME=$HOME/android-ndk-r21e" >> $GITHUB_ENV
+    - name: Make gradlew executable
+      run: chmod +x ./gradlew
 
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug -Dorg.gradle.cflags="-w" -Dorg.gradle.cppflags="-w"
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
+        path: app/build/outputs/apk/debug/app-debug.apk
     - name: Make gradlew executable
       run: chmod +x ./gradlew
 
