@@ -26,41 +26,27 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Universal Header & Dialogs Fixer
+    - name: Clean Duplicates & Create Soft Links
       run: |
-        # 1. ค้นหาไฟล์ playerTabList.h แล้ววางไว้ใน gui ทุกจุด
-        TABLIST_PATH=$(find . -iname "*playertablist*.h" | head -n 1)
-        if [ -n "$TABLIST_PATH" ]; then
-          find . -name "gui.h" | while read -r gui_file; do
-            gui_dir=$(dirname "$gui_file")
-            cp "$TABLIST_PATH" "$gui_dir/playerTabList.h" 2>/dev/null || true
-          done
+        SAMP_DIR="app/src/main/cpp/samp"
+        
+        # 1. ลบโฟลเดอร์ dialogs ที่ก๊อปปี้ซ้ำออก ป้องกัน Redefinition Error
+        rm -rf "$SAMP_DIR/dialogs" 2>/dev/null || true
+        
+        # 2. ทำ Symlink เชื่อม samp/dialogs ไปหา samp_widgets/dialogs โดยตรง ไม่ก็อปปี้ไฟล์ซ้ำ
+        REAL_DIALOGS=$(find "$SAMP_DIR" -type d -name "dialogs" | head -n 1)
+        if [ -n "$REAL_DIALOGS" ]; then
+          mkdir -p "$SAMP_DIR"
+          ln -sfn "$(realpath "$REAL_DIALOGS")" "$SAMP_DIR/dialogs"
         fi
-
-        # 2. ค้นหาไฟล์ tablistwidget.h หรือ widget อื่นๆ แล้วสร้างโฟลเดอร์ dialogs รองรับ
-        WIDGET_PATH=$(find . -iname "*tablistwidget*.h" | head -n 1)
-        if [ -n "$WIDGET_PATH" ]; then
-          widget_parent=$(dirname "$WIDGET_PATH")
-          echo "Found widget at $WIDGET_PATH"
-          
-          # สร้างโฟลเดอร์ dialogs ไว้ข้างๆ gui และในทุกจุดที่มี gui
-          find . -name "gui" -type d | while read -r g_dir; do
-            parent_d=$(dirname "$g_dir")
-            mkdir -p "$parent_d/dialogs"
-            cp "$widget_parent"/*.h "$parent_d/dialogs/" 2>/dev/null || true
-            cp "$widget_parent"/*.h "$g_dir/" 2>/dev/null || true
-          done
-        fi
-
-        # 3. เทไฟล์ .h ทั้งหมดมารวมกันในทุกโฟลเดอร์ dialogs และ samp เพื่อความปลอดภัยสูงสุด
-        find . -type d -name "dialogs" | while read -r d_dir; do
-          find . -type f -name "*.h" -exec cp {} "$d_dir/" \; 2>/dev/null || true
-        done
 
     - name: Configure CMake Include Paths
       run: |
-        CPP_DIRS=$(find app/src/main/cpp -type d 2>/dev/null | tr '\n' ' ')
-        find . -name "CMakeLists.txt" -exec sed -i "1i include_directories($CPP_DIRS)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive\")" {} +
+        # ตั้งค่า include_directories แบบสะอาด ปราศจากไฟล์ซ้ำ
+        SAMP_CMAKE=$(find app/src/main/cpp/samp -maxdepth 1 -name "CMakeLists.txt" | head -n 1)
+        if [ -n "$SAMP_CMAKE" ]; then
+          sed -i '1i include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/gui ${CMAKE_CURRENT_SOURCE_DIR}/samp_widgets ${CMAKE_CURRENT_SOURCE_DIR}/samp_widgets/dialogs)\nadd_compile_options(-w -fpermissive)' "$SAMP_CMAKE"
+        fi
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
