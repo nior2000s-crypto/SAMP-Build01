@@ -28,13 +28,38 @@ jobs:
           echo "No zip file found, skipping unzip."
         fi
 
-    - name: Inject Include Paths into CMakeLists
+    - name: Flatten Widget Headers & Case Fix
       run: |
-        # แทรก include_directories ลงในบรรทัดแรกของ CMakeLists.txt ทุกไฟล์
-        find . -name "CMakeLists.txt" -exec sed -i '1i include_directories(${CMAKE_CURRENT_SOURCE_DIR}/gui ${CMAKE_CURRENT_SOURCE_DIR}/samp/gui ${CMAKE_CURRENT_SOURCE_DIR}/app/src/main/cpp/samp/gui)' {} +
+        # ค้นหาโฟลเดอร์ samp_widgets แบบไม่สนตัวเล็กตัวใหญ่
+        WIDGET_DIR=$(find . -iname "samp_widgets" -type d | head -n 1)
+        if [ -n "$WIDGET_DIR" ]; then
+          echo "Found widget directory at: $WIDGET_DIR"
+          
+          # คัดลอกไฟล์ทั้งหมดใน samp_widgets ไปวางไว้ตามโฟลเดอร์ gui และโฟลเดอร์ย่อย samp_widgets ทุกจุด
+          find . -type d -name "gui" | while read -r gui_path; do
+            mkdir -p "$gui_path/samp_widgets"
+            cp -r "$WIDGET_DIR"/* "$gui_path/" 2>/dev/null || true
+            cp -r "$WIDGET_DIR"/* "$gui_path/samp_widgets/" 2>/dev/null || true
+          done
+        fi
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Make gradlew executable
+      run: chmod +x ./gradlew
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
+        path: app/build/outputs/apk/debug/app-debug.apk      uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
