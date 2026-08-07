@@ -26,19 +26,11 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Clean Duplicates and Fix Header Redefinition
+    - name: Fix gui.h Missing and Header Paths
       run: |
         CPP_ROOT="app/src/main/cpp"
 
-        # 1. ลบไฟล์ Header ที่ถูกสคริปต์เก่าก๊อปปี้ไปสร้างไว้ซ้ำซ้อนที่ Root C++
-        find "$CPP_ROOT" -maxdepth 1 -type f \( -name "*.h" -o -name "*.hpp" \) -exec rm -f {} \;
-
-        # 2. แก้ปัญหา Redefinition ของ VerifyMacroImpl ใน common.h
-        find "$CPP_ROOT" -iname "common.h" | while read -r cfile; do
-          sed -i 's/static void VerifyMacroImpl/inline static void VerifyMacroImpl/g' "$cfile"
-        done
-
-        # 3. แก้ปัญหา Opus Config & Version
+        # 1. แก้ปัญหา Opus Config & Version
         find "$CPP_ROOT" -type d -iname "*opus*" | while read -r opus_dir; do
           echo '#define PACKAGE_VERSION "1.3.1"' > "$opus_dir/version.h"
           echo '#define VERSION "1.3.1"' >> "$opus_dir/version.h"
@@ -46,15 +38,23 @@ jobs:
           echo '#define CUSTOM_MODES 1' >> "$opus_dir/version.h"
         done
 
-        # 4. ปรับ include ติดโฟลเดอร์ dialogs/ หรือ gui/ ให้เรียกชื่อไฟล์ตรงๆ
-        find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.cpp" -o -name "*.c" \) | while read -r f; do
-          sed -i 's/#include "dialogs\//#include "/g' "$f"
-          sed -i 's/#include "Dialogs\//#include "/g' "$f"
-          sed -i 's/#include "gui\//#include "/g' "$f"
-          sed -i 's/#include "GUI\//#include "/g' "$f"
+        # 2. แก้ปัญหา Redefinition ใน common.h
+        find "$CPP_ROOT" -iname "common.h" | while read -r cfile; do
+          sed -i 's/static void VerifyMacroImpl/inline static void VerifyMacroImpl/g' "$cfile"
         done
 
-        # 5. แก้ปัญหา Matrix.h และ audiostream.cpp
+        # 3. ค้นหาตำแหน่ง gui.h ที่มีอยู่ในโปรเจกต์ แล้วคัดลอกมาไว้ที่ root ของ cpp
+        GUI_H_ORIGINAL=$(find "$CPP_ROOT" -iname "gui.h" | head -n 1)
+        if [ -n "$GUI_H_ORIGINAL" ]; then
+          cp -f "$GUI_H_ORIGINAL" "$CPP_ROOT/gui.h"
+        else
+          # ถ้าไม่มี gui.h เลย ให้สร้างไฟล์หลอกไว้กัน error
+          echo "#ifndef GUI_H" > "$CPP_ROOT/gui.h"
+          echo "#define GUI_H" >> "$CPP_ROOT/gui.h"
+          echo "#endif" >> "$CPP_ROOT/gui.h"
+        fi
+
+        # 4. แก้ปัญหา Matrix.h และ audiostream.cpp
         find "$CPP_ROOT" -iname "Matrix.h" | while read -r matrix_file; do
           sed -i '1i class CQuaternion;' "$matrix_file"
         done
@@ -64,7 +64,7 @@ jobs:
           sed -i 's/Log("Stop: %s", g_szAudioStreamUrl);/\/\/ Log("Stop: %s", g_szAudioStreamUrl);/g' "$audio_file"
         done
 
-        # 6. ตั้งค่า Include Path ใน CMakeLists.txt ให้ครอบคลุมโดยไม่ต้องคัดลอกไฟล์
+        # 5. ใส่ Include Path ทั้งหมดใน CMakeLists.txt
         CPP_DIRS=$(find "$CPP_ROOT" -type d | tr '\n' ' ')
         find "$CPP_ROOT" -name "CMakeLists.txt" | while read -r cmake_file; do
           sed -i "1i include_directories($CPP_DIRS)\nadd_compile_options(-w -fpermissive -ferror-limit=0 -Wno-error=everything)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive -ferror-limit=0\")\nset(CMAKE_C_FLAGS \"\${CMAKE_C_FLAGS} -w -fpermissive -ferror-limit=0\")" "$cmake_file"
