@@ -26,7 +26,7 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Fix Duplicate Vectors & Correct Include Strategy
+    - name: Fix Header Inclusions & Flat Copy for GUI
       run: |
         CPP_ROOT="app/src/main/cpp"
 
@@ -53,10 +53,15 @@ jobs:
           sed -i 's/Log("Stop: %s", g_szAudioStreamUrl);/\/\/ Log("Stop: %s", g_szAudioStreamUrl);/g' "$audio_file"
         done
 
-        # 4. ลบไฟล์ Vector.h ที่ซ้ำซ้อนใน Collision เพื่อป้องกัน Ambiguous Error
-        find "$CPP_ROOT" -path "*/Collision/Vector.h" -delete 2>/dev/null || true
+        # 4. คัดลอกไฟล์ .h / .hpp ทุกไฟล์มารวมไว้ในโฟลเดอร์เดียวกับ gui.h และทุกโฟลเดอร์ย่อย
+        find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r hfile; do
+          fname=$(basename "$hfile")
+          find "$CPP_ROOT" -type d | while read -r sub_dir; do
+            cp -f "$hfile" "$sub_dir/$fname" 2>/dev/null || true
+          done
+        done
 
-        # 5. ตั้งค่า Include Directories ใน CMakeLists.txt ให้ครอบคลุมโดยไม่ก็อปปี้ไฟล์ซ้ำ
+        # 5. ตั้งค่า Include Directories ใน CMakeLists.txt ให้ครอบคลุม
         find "$CPP_ROOT" -name "CMakeLists.txt" | while read -r cmake_file; do
           cmake_dir=$(dirname "$cmake_file")
           all_subdirs=$(find "$cmake_dir" -type d | tr '\n' ' ')
@@ -69,28 +74,6 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Make gradlew executable
-      run: chmod +x ./gradlew
-
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug
-
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
-    - name: Make gradlew executable
-      run: chmod +x ./gradlew
-
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug
-
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
     - name: Make gradlew executable
       run: chmod +x ./gradlew
 
