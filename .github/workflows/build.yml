@@ -26,14 +26,14 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Fix Matrix CQuaternion & Create Header Symlinks
+    - name: Fix C++ Headers & Audiostream Error
       run: |
-        # 1. แทรกForward Declaration ใน Matrix.h ป้องกัน error unknown type name 'CQuaternion'
+        # 1. แทรก Forward Declaration ใน Matrix.h
         find app/src/main/cpp -iname "Matrix.h" | while read -r matrix_file; do
           sed -i '1i class CQuaternion;' "$matrix_file"
         done
 
-        # 2. สร้าง Symlink (ทางลัด) ไฟล์ .h ทุกไฟล์ไปยังโฟลเดอร์หลักโดยไม่คัดลอกไฟล์จริง
+        # 2. สร้าง Symlink สำหรับไฟล์ .h ทั้งหมด
         CPP_ROOT="app/src/main/cpp"
         TARGET_SAMP="$CPP_ROOT/samp"
         TARGET_GUI="$CPP_ROOT/samp/gui"
@@ -46,9 +46,15 @@ jobs:
           ln -sfn "$(realpath "$hfile")" "$TARGET_GUI/$fname" 2>/dev/null || true
         done
 
-        # 3. ตั้งค่า Flag ผ่อนปรนการตรวจ C++ ใน CMakeLists.txt
+        # 3. แก้ไขข้อผิดพลาดใน audiostream.cpp (คอมเมนต์บรรทัด Log ที่ส่งผลให้เกิด struct initializer error)
+        find app/src/main/cpp -iname "audiostream.cpp" | while read -r audio_file; do
+          sed -i 's/Log("Play: %s", szUrl);/\/\/ Log("Play: %s", szUrl);/g' "$audio_file"
+          sed -i 's/Log("Stop: %s", g_szAudioStreamUrl);/\/\/ Log("Stop: %s", g_szAudioStreamUrl);/g' "$audio_file"
+        done
+
+        # 4. ตั้งค่า Flag ผ่อนปรนเพิ่มเติมสำหรับ Clang C++
         find app/src/main/cpp -name "CMakeLists.txt" | while read -r cmake_file; do
-          sed -i '1i add_compile_options(-w -fpermissive -Wno-error=everything)\nset(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -fpermissive")' "$cmake_file"
+          sed -i '1i add_compile_options(-w -fpermissive -Wno-error=everything -Wno-c++11-narrowing -Wno-excess-initializers)\nset(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -fpermissive")' "$cmake_file"
         done
 
     - name: Set up JDK 17
