@@ -26,7 +26,7 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Fix gui.h Missing and Header Paths
+    - name: Ultimate Header Linker & Redefinition Fix
       run: |
         CPP_ROOT="app/src/main/cpp"
 
@@ -43,18 +43,23 @@ jobs:
           sed -i 's/static void VerifyMacroImpl/inline static void VerifyMacroImpl/g' "$cfile"
         done
 
-        # 3. ค้นหาตำแหน่ง gui.h ที่มีอยู่ในโปรเจกต์ แล้วคัดลอกมาไว้ที่ root ของ cpp
-        GUI_H_ORIGINAL=$(find "$CPP_ROOT" -iname "gui.h" | head -n 1)
-        if [ -n "$GUI_H_ORIGINAL" ]; then
-          cp -f "$GUI_H_ORIGINAL" "$CPP_ROOT/gui.h"
-        else
-          # ถ้าไม่มี gui.h เลย ให้สร้างไฟล์หลอกไว้กัน error
-          echo "#ifndef GUI_H" > "$CPP_ROOT/gui.h"
-          echo "#define GUI_H" >> "$CPP_ROOT/gui.h"
-          echo "#endif" >> "$CPP_ROOT/gui.h"
-        fi
+        # 3. ตัดพาธโฟลเดอร์ออกจากคำสั่ง #include (เช่น "gui/gui.h" -> "gui.h")
+        find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.cpp" -o -name "*.c" \) | while read -r f; do
+          sed -i 's/#include "dialogs\//#include "/g' "$f"
+          sed -i 's/#include "Dialogs\//#include "/g' "$f"
+          sed -i 's/#include "gui\//#include "/g' "$f"
+          sed -i 's/#include "GUI\//#include "/g' "$f"
+        done
 
-        # 4. แก้ปัญหา Matrix.h และ audiostream.cpp
+        # 4. คัดลอกไฟล์ .h ทุกไฟล์จากโฟลเดอร์ย่อยมาไว้ที่ Root C++ (ทั้งชื่อเดิมและชื่อพิมพ์เล็ก)
+        find "$CPP_ROOT" -mindepth 2 -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r hfile; do
+          fname=$(basename "$hfile")
+          lower_name=$(echo "$fname" | tr '[:upper:]' '[:lower:]')
+          cp -n "$hfile" "$CPP_ROOT/$fname" 2>/dev/null || true
+          cp -n "$hfile" "$CPP_ROOT/$lower_name" 2>/dev/null || true
+        done
+
+        # 5. แก้ปัญหา Matrix.h และ audiostream.cpp
         find "$CPP_ROOT" -iname "Matrix.h" | while read -r matrix_file; do
           sed -i '1i class CQuaternion;' "$matrix_file"
         done
@@ -64,7 +69,7 @@ jobs:
           sed -i 's/Log("Stop: %s", g_szAudioStreamUrl);/\/\/ Log("Stop: %s", g_szAudioStreamUrl);/g' "$audio_file"
         done
 
-        # 5. ใส่ Include Path ทั้งหมดใน CMakeLists.txt
+        # 6. ใส่ Include Path ทั้งหมดลงใน CMakeLists.txt
         CPP_DIRS=$(find "$CPP_ROOT" -type d | tr '\n' ' ')
         find "$CPP_ROOT" -name "CMakeLists.txt" | while read -r cmake_file; do
           sed -i "1i include_directories($CPP_DIRS)\nadd_compile_options(-w -fpermissive -ferror-limit=0 -Wno-error=everything)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive -ferror-limit=0\")\nset(CMAKE_C_FLAGS \"\${CMAKE_C_FLAGS} -w -fpermissive -ferror-limit=0\")" "$cmake_file"
