@@ -26,26 +26,17 @@ jobs:
           rm -rf temp_unzip
         fi
 
-    - name: Fix Case Sensitivity & Link All Headers
+    - name: Fix CQuaternion & Include Directives
       run: |
-        CPP_ROOT="app/src/main/cpp"
-        if [ -d "$CPP_ROOT" ]; then
-          find "$CPP_ROOT" -type f \( -name "*.h" -o -name "*.hpp" \) | while read -r hfile; do
-            filename=$(basename "$hfile")
-            lower_filename=$(echo "$filename" | tr '[:upper:]' '[:lower:]')
-            
-            find "$CPP_ROOT" -type d \( -name "samp" -o -name "gui" -o -name "dialogs" \) | while read -r target_dir; do
-              cp -u "$hfile" "$target_dir/$filename" 2>/dev/null || true
-              cp -u "$hfile" "$target_dir/$lower_filename" 2>/dev/null || true
-            done
-          done
-        fi
+        # 1. แทรกForward Declaration 'class CQuaternion;' เข้าไปใน Matrix.h ป้องกัน error unknown type name
+        find app/src/main/cpp -iname "Matrix.h" | while read -r matrix_file; do
+          sed -i '1i class CQuaternion;' "$matrix_file"
+        done
 
-    - name: Bypass C++ Compiler Strict Errors
-      run: |
-        # แทรกคำสั่งปิด Warning และอนุญาต C++ ไวยากรณ์รุ่นเก่า (-w -fpermissive -Wno-error) ลงใน CMakeLists.txt ทุกตัว
+        # 2. ปรับแต่ง CMakeLists.txt ให้ค้นหา Include Path อัตโนมัติ โดยไม่ต้องก็อปปี้ไฟล์ซ้ำลงโฟลเดอร์
+        ALL_CPP_DIRS=$(find app/src/main/cpp -type d 2>/dev/null | tr '\n' ' ')
         find app/src/main/cpp -name "CMakeLists.txt" | while read -r cmake_file; do
-          sed -i '1i add_compile_options(-w -fpermissive -Wno-error=everything)\nset(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -fpermissive -fdeclspec")' "$cmake_file"
+          sed -i "1i include_directories($ALL_CPP_DIRS)\nadd_compile_options(-w -fpermissive -Wno-error=everything)\nset(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} -w -fpermissive\")" "$cmake_file"
         done
 
     - name: Set up JDK 17
